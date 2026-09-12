@@ -1,18 +1,23 @@
 """Reqif: lectura, edición y exportación de un único documento .reqif."""
 from __future__ import annotations
 
+import io
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
+from PIL import Image as PILImage
 
 XHTML_NS = 'http://www.w3.org/1999/xhtml'
 
 EXCEL_HEADERS = ['ID', 'Texto', 'Kommentar Lieferant M', 'Status Lieferant M']
+IMAGE_COLUMN = 'E'
+IMAGE_MAX_SIZE = 160  # px, tanto ancho como alto
 
 _DEFINITION_TAGS = [
     'ATTRIBUTE-DEFINITION-STRING',
@@ -325,17 +330,47 @@ class Reqif:
 
     # -- Excel ----------------------------------------------------------
 
-    def to_excel(self, destination):
+    @staticmethod
+    def _scaled_png(source, max_size=IMAGE_MAX_SIZE):
+        """Abre una imagen (ruta u objeto tipo fichero), la reduce si
+        hace falta para que quepa en max_size x max_size px, y la
+        devuelve como (BytesIO en PNG, (ancho, alto))."""
+        image = PILImage.open(source)
+        image.load()
+        if image.mode not in ('RGB', 'RGBA'):
+            image = image.convert('RGBA')
+
+        width, height = image.size
+        scale = min(max_size / width, max_size / height, 1.0)
+        new_size = (max(1, round(width * scale)), max(1, round(height * scale)))
+        if new_size != (width, height):
+            image = image.resize(new_size)
+
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        return buffer, new_size
+
+    def to_excel(self, destination, image_resolver: Callable[[str], object] | None = None):
         """Escribe en `destination` (ruta u objeto tipo fichero) un
         .xlsx con una fila por requisito y un desplegable de validación
-        en la columna de estado con las opciones reales del ReqIF."""
+        en la columna de estado con las opciones reales del ReqIF.
+
+        Si se pasa `image_resolver` (una función que recibe la ruta tal
+        como aparece en `Requirement.images` y devuelve una ruta o un
+        objeto tipo fichero legible por PIL, p.ej. `Reqifz.image_path`),
+        se incrusta la primera imagen de cada requisito en la celda de
+        la columna "Imagen". Una imagen que no se pueda leer se omite
+        sin interrumpir la exportación.
+        """
         option_names = [name for name in self.status_options if name]
         wrap_top = Alignment(wrap_text=True, vertical='top')
+        headers = list(EXCEL_HEADERS) + (['Imagen'] if image_resolver else [])
 
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = 'Requisitos'
-        sheet.append(EXCEL_HEADERS)
+        sheet.append(headers)
         for cell in sheet[1]:
             cell.alignment = Alignment(wrap_text=True, vertical='center')
 
@@ -345,10 +380,15 @@ class Reqif:
             for column in ('A', 'B', 'C', 'D'):
                 sheet[f'{column}{row}'].alignment = wrap_top
 
+            if image_resolver and req.images:
+                self._embed_image(sheet, row, image_resolver, req.images[0])
+
         sheet.column_dimensions['A'].width = 38
         sheet.column_dimensions['B'].width = 60
         sheet.column_dimensions['C'].width = 45
         sheet.column_dimensions['D'].width = 24
+        if image_resolver:
+            sheet.column_dimensions[IMAGE_COLUMN].width = IMAGE_MAX_SIZE / 7
         sheet.freeze_panes = 'A2'
 
         if option_names:
@@ -369,6 +409,24 @@ class Reqif:
             validation.add(f'D2:D{last_row}')
 
         workbook.save(destination)
+
+    def _embed_image(self, sheet, row, image_resolver, image_ref):
+        try:
+            source = image_resolver(image_ref)
+            if source is None:
+                return
+            if not hasattr(source, 'read') and not Path(source).exists():
+                return
+            buffer, (width, height) = self._scaled_png(source)
+            xl_image = XLImage(buffer)
+            xl_image.width, xl_image.height = width, height
+            sheet.add_image(xl_image, f'{IMAGE_COLUMN}{row}')
+            current_height = sheet.row_dimensions[row].height or 0
+            sheet.row_dimensions[row].height = max(current_height, height * 0.75)
+        except Exception:
+            # imagen corrupta, formato no soportado por PIL, etc.: se
+            # omite en vez de romper toda la exportación.
+            pass
 
     def update_from_excel(self, source) -> int:
         """Lee un .xlsx (con las columnas de to_excel) desde `source`

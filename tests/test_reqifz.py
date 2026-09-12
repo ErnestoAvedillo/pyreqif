@@ -1,5 +1,7 @@
 import zipfile
 
+from openpyxl import load_workbook
+
 from pyreqif import Reqifz
 
 
@@ -61,3 +63,13 @@ def test_explicit_work_dir_is_not_deleted_on_close(sample_reqifz_path, tmp_path)
     with Reqifz(sample_reqifz_path, work_dir=work_dir) as pack:
         assert pack.work_dir == work_dir
     assert work_dir.exists()
+
+
+def test_to_excel_with_pack_image_path_as_resolver(sample_reqifz_path, tmp_path):
+    with Reqifz(sample_reqifz_path) as pack:
+        doc = pack.get(0)
+        xlsx_path = tmp_path / 'out.xlsx'
+        doc.to_excel(xlsx_path, image_resolver=pack.image_path)
+
+    sheet = load_workbook(xlsx_path)['Requisitos']
+    assert len(sheet._images) == 1

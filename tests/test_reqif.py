@@ -1,4 +1,7 @@
+import io
+
 from openpyxl import load_workbook
+from PIL import Image as PILImage
 
 from pyreqif import Reqif, ReqifError
 
@@ -117,3 +120,61 @@ def test_update_from_excel_applies_only_comment_and_status(sample_reqif_path, tm
     assert req1.comment == 'Actualizado desde Excel'
     assert req1.status == 'nicht akzeptiert'
     assert 'arrancar en menos de 2 segundos' in req1.text
+
+
+def _make_png_bytes(size=(300, 150), color=(10, 200, 10)):
+    buffer = io.BytesIO()
+    PILImage.new('RGB', size, color=color).save(buffer, format='PNG')
+    buffer.seek(0)
+    return buffer
+
+
+def test_to_excel_without_resolver_has_no_image_column(sample_reqif_path, tmp_path):
+    doc = Reqif(sample_reqif_path)
+    xlsx_path = tmp_path / 'no_images.xlsx'
+    doc.to_excel(xlsx_path)
+
+    sheet = load_workbook(xlsx_path)['Requisitos']
+    assert [c.value for c in sheet[1]] == ['ID', 'Texto', 'Kommentar Lieferant M', 'Status Lieferant M']
+    assert sheet._images == []
+
+
+def test_to_excel_embeds_image_when_resolver_given(sample_reqif_path, tmp_path):
+    doc = Reqif(sample_reqif_path)
+    xlsx_path = tmp_path / 'with_images.xlsx'
+
+    def resolver(image_ref):
+        assert image_ref == 'attachments/img1.png'
+        return _make_png_bytes()
+
+    doc.to_excel(xlsx_path, image_resolver=resolver)
+
+    sheet = load_workbook(xlsx_path)['Requisitos']
+    assert [c.value for c in sheet[1]] == ['ID', 'Texto', 'Kommentar Lieferant M', 'Status Lieferant M', 'Imagen']
+    # solo _req-1 tiene imagen, en la fila 3 (cabecera=1, _chapter-1=2, _req-1=3)
+    assert len(sheet._images) == 1
+    anchor = sheet._images[0].anchor
+    assert anchor._from.col == 4  # columna E (0-indexed)
+    assert anchor._from.row == 2  # fila 3 (0-indexed)
+
+
+def test_to_excel_skips_missing_image_without_crashing(sample_reqif_path, tmp_path):
+    doc = Reqif(sample_reqif_path)
+    xlsx_path = tmp_path / 'missing_image.xlsx'
+
+    doc.to_excel(xlsx_path, image_resolver=lambda ref: None)
+
+    sheet = load_workbook(xlsx_path)['Requisitos']
+    assert sheet._images == []
+
+
+def test_to_excel_scales_down_large_images(sample_reqif_path, tmp_path):
+    doc = Reqif(sample_reqif_path)
+    xlsx_path = tmp_path / 'big_image.xlsx'
+
+    doc.to_excel(xlsx_path, image_resolver=lambda ref: _make_png_bytes(size=(1000, 500)))
+
+    sheet = load_workbook(xlsx_path)['Requisitos']
+    image = sheet._images[0]
+    assert image.width <= 160
+    assert image.height <= 160

@@ -4,14 +4,16 @@ Librería Python para leer, editar y reempaquetar documentos [ReqIF](https://www
 
 Dos clases:
 
-- **`Reqif`**: un único fichero `.reqif`. Lee cada requisito (`SPEC-OBJECT`) con su texto, y dos campos configurables pensados para el flujo proveedor: comentario (`Kommentar Lieferant M`, XHTML) y estado (`Status Lieferant M`, enumerado). Permite editarlos, exportar/importar por Excel (con desplegable de validación para el estado) y detecta las imágenes embebidas en el texto de cada requisito.
+- **`Reqif`**: un único fichero `.reqif`. Lee cada requisito (`SPEC-OBJECT`) con su texto, y dos campos configurables pensados para el flujo proveedor: comentario (`Kommentar Lieferant M`, XHTML) y estado (`Status Lieferant M`, enumerado). Permite editarlos, exportar/importar por Excel (con desplegable de validación para el estado, e imágenes embebidas en la celda si se le pasa un resolutor) y detecta las imágenes embebidas en el texto de cada requisito.
 - **`Reqifz`**: un `.reqifz` (zip con uno o varios `.reqif` más sus adjuntos). Extrae a un directorio de trabajo, expone cada `.reqif` como un `Reqif`, y reempaqueta todo de vuelta conservando los adjuntos intactos.
 
 ## Instalación
 
 ```bash
-pip install pyreqif
+pip install pyreqifz
 ```
+
+(el nombre del paquete en PyPI es `pyreqifz` — `pyreqif` ya estaba cogido — pero el módulo se sigue importando como `pyreqif`.)
 
 ## Uso básico
 
@@ -31,15 +33,18 @@ with Reqifz("lastenheft.reqifz") as pack:
     # editar (None deja el campo igual, "" lo vacía)
     doc.update("_a1b2c3...", comment="Aceptado, sin cambios.", status="akzeptiert")
 
-    # exportar/importar por Excel
-    doc.to_excel("requisitos.xlsx")
+    # exportar a Excel, con la primera imagen de cada requisito
+    # incrustada en su celda (columna "Imagen")
+    doc.to_excel("requisitos.xlsx", image_resolver=pack.image_path)
+
+    # importar de vuelta (solo toca comentario y estado)
     doc.update_from_excel("requisitos_revisado.xlsx")
 
     # volver a empaquetar con los cambios
     pack.save("lastenheft_editado.reqifz")
 ```
 
-Un `.reqif` suelto (sin comprimir) se usa igual, sin pasar por `Reqifz`:
+Un `.reqif` suelto (sin comprimir) se usa igual, sin pasar por `Reqifz` (pero entonces `to_excel()` no puede incrustar imágenes, ya que no sabe dónde están los adjuntos — pásale tu propio `image_resolver` si los tienes en otro sitio):
 
 ```python
 from pyreqif import Reqif
