@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pyreqif"
+name = "pyreqifz"
 version = "0.1.0"
 description = "Read, edit and repack ReqIF/ReqIFz requirement documents (OMG ReqIF standard)"
 readme = "README.md"
