@@ -1,4 +1,4 @@
-"""Reqif: lectura, edición y exportación de un único documento .reqif."""
+"""Reqif: reading, editing, and exporting a single .reqif document."""
 from __future__ import annotations
 
 import io
@@ -17,7 +17,7 @@ XHTML_NS = 'http://www.w3.org/1999/xhtml'
 
 EXCEL_HEADERS = ['ID', 'Texto', 'Kommentar Lieferant M', 'Status Lieferant M']
 IMAGE_COLUMN = 'E'
-IMAGE_MAX_SIZE = 160  # px, tanto ancho como alto
+IMAGE_MAX_SIZE = 160  # px, both width and height
 
 _DEFINITION_TAGS = [
     'ATTRIBUTE-DEFINITION-STRING',
@@ -35,7 +35,7 @@ class ReqifError(Exception):
 
 @dataclass
 class Requirement:
-    """Un SPEC-OBJECT del ReqIF, con los campos relevantes ya resueltos."""
+    """A ReqIF SPEC-OBJECT, with the relevant fields already resolved."""
     id: str
     text: str
     is_chapter: bool
@@ -45,14 +45,14 @@ class Requirement:
 
 
 class Reqif:
-    """Representa un único fichero .reqif (XML, estándar OMG ReqIF).
+    """Represents a single .reqif file (XML, OMG ReqIF standard).
 
-    Se puede editar el comentario y el estado de cada requisito
-    (`Kommentar Lieferant M` / `Status Lieferant M` por defecto, pero los
-    nombres de atributo son configurables mediante subclase o los
-    parámetros de clase TEXT_ATTR/CHAPTER_ATTR/COMMENT_ATTR/STATUS_ATTR),
-    exportar a Excel con validación de datos para el estado, e importar
-    de vuelta un Excel modificado.
+    The comment and status of each requirement can be edited
+    (`Kommentar Lieferant M` / `Status Lieferant M` by default, but the
+    attribute names are configurable via subclassing or the
+    TEXT_ATTR/CHAPTER_ATTR/COMMENT_ATTR/STATUS_ATTR class parameters),
+    exported to Excel with data validation for the status, and imported
+    back from a modified Excel file.
     """
 
     TEXT_ATTR = 'ReqIF.Text'
@@ -61,7 +61,7 @@ class Reqif:
     STATUS_ATTR = 'Status Lieferant M'
 
     def __init__(self, source):
-        """source: ruta a un .reqif, o un objeto tipo fichero ya abierto."""
+        """source: path to a .reqif, or an already-open file-like object."""
         if hasattr(source, 'read'):
             self.path = None
             self._tree = ET.parse(source)
@@ -75,7 +75,7 @@ class Reqif:
         self._status_options = self._status_options_list()
         self._requirements, self._by_id = self._parse_requirements()
 
-    # -- construcción --------------------------------------------------
+    # -- construction ----------------------------------------------------
 
     def _namespace(self):
         tag = self._root.tag
@@ -126,9 +126,9 @@ class Reqif:
 
     @staticmethod
     def _collect_images(the_value_el):
-        """<object type="image/..." data="ruta"> dentro del XHTML,
-        incluidos los anidados (p.ej. un .doc con una vista previa PNG
-        como fallback)."""
+        """<object type="image/..." data="path"> inside the XHTML,
+        including nested ones (e.g. a .doc with a PNG preview
+        as fallback)."""
         if the_value_el is None:
             return []
         images = []
@@ -198,7 +198,7 @@ class Reqif:
 
         return requirements, by_id
 
-    # -- API pública ------------------------------------------------
+    # -- public API ---------------------------------------------------
 
     @property
     def requirements(self) -> list[Requirement]:
@@ -218,13 +218,13 @@ class Reqif:
         return iter(self._requirements)
 
     def update(self, identifier: str, comment: str | None = None, status: str | None = None):
-        """Actualiza el comentario y/o el estado de un requisito.
+        """Updates the comment and/or status of a requirement.
 
-        `None` deja el campo tal cual está; usa '' para vaciarlo.
+        `None` leaves the field as is; use '' to clear it.
         """
         requirement = self._by_id.get(identifier)
         if requirement is None:
-            raise ReqifError(f'No se encontró el requisito {identifier}')
+            raise ReqifError(f'Requirement {identifier} not found')
 
         spec_object = self._find_spec_object(identifier)
         values = spec_object.find('r:VALUES', self._ns)
@@ -245,8 +245,8 @@ class Reqif:
             requirement.status = status.strip()
 
     def update_many(self, updates: Iterable[tuple[str, str | None, str | None]]) -> int:
-        """updates: iterable de (identifier, comment, status). Devuelve
-        cuántas filas coincidieron con un requisito existente."""
+        """updates: iterable of (identifier, comment, status). Returns
+        how many rows matched an existing requirement."""
         applied = 0
         for identifier, comment, status in updates:
             if identifier not in self._by_id:
@@ -259,7 +259,7 @@ class Reqif:
         for candidate in self._root.findall('.//r:SPEC-OBJECT', self._ns):
             if candidate.attrib.get('IDENTIFIER') == identifier:
                 return candidate
-        raise ReqifError(f'No se encontró el SPEC-OBJECT {identifier}')
+        raise ReqifError(f'SPEC-OBJECT {identifier} not found')
 
     def _set_xhtml_value(self, values, def_id, text):
         ns = self._ns
@@ -318,23 +318,23 @@ class Reqif:
         ref_val = ET.SubElement(values_el, self._qn('ENUM-VALUE-REF'))
         ref_val.text = enum_id
 
-    # -- persistencia -------------------------------------------------
+    # -- persistence ----------------------------------------------------
 
     def save(self, destination=None):
-        """Escribe el XML actual en `destination` (ruta u objeto tipo
-        fichero), o en self.path si no se indica ninguno."""
+        """Writes the current XML to `destination` (path or file-like
+        object), or to self.path if none is given."""
         target = destination if destination is not None else self.path
         if target is None:
-            raise ReqifError('No hay ruta de destino: pasa una a save() o crea el Reqif desde una ruta.')
+            raise ReqifError('No destination path: pass one to save() or create the Reqif from a path.')
         self._tree.write(target, encoding='utf-8', xml_declaration=True)
 
     # -- Excel ----------------------------------------------------------
 
     @staticmethod
     def _scaled_png(source, max_size=IMAGE_MAX_SIZE):
-        """Abre una imagen (ruta u objeto tipo fichero), la reduce si
-        hace falta para que quepa en max_size x max_size px, y la
-        devuelve como (BytesIO en PNG, (ancho, alto))."""
+        """Opens an image (path or file-like object), shrinks it if
+        needed to fit within max_size x max_size px, and returns it
+        as (BytesIO in PNG, (width, height))."""
         image = PILImage.open(source)
         image.load()
         if image.mode not in ('RGB', 'RGBA'):
@@ -352,16 +352,16 @@ class Reqif:
         return buffer, new_size
 
     def to_excel(self, destination, image_resolver: Callable[[str], object] | None = None):
-        """Escribe en `destination` (ruta u objeto tipo fichero) un
-        .xlsx con una fila por requisito y un desplegable de validación
-        en la columna de estado con las opciones reales del ReqIF.
+        """Writes to `destination` (path or file-like object) an
+        .xlsx with one row per requirement and a validation dropdown
+        in the status column with the actual ReqIF options.
 
-        Si se pasa `image_resolver` (una función que recibe la ruta tal
-        como aparece en `Requirement.images` y devuelve una ruta o un
-        objeto tipo fichero legible por PIL, p.ej. `Reqifz.image_path`),
-        se incrusta la primera imagen de cada requisito en la celda de
-        la columna "Imagen". Una imagen que no se pueda leer se omite
-        sin interrumpir la exportación.
+        If `image_resolver` is given (a function that receives the path
+        as it appears in `Requirement.images` and returns a path or a
+        file-like object readable by PIL, e.g. `Reqifz.image_path`),
+        the first image of each requirement is embedded in the cell of
+        the "Imagen" column. An image that can't be read is skipped
+        without interrupting the export.
         """
         option_names = [name for name in self.status_options if name]
         wrap_top = Alignment(wrap_text=True, vertical='top')
@@ -424,15 +424,15 @@ class Reqif:
             current_height = sheet.row_dimensions[row].height or 0
             sheet.row_dimensions[row].height = max(current_height, height * 0.75)
         except Exception:
-            # imagen corrupta, formato no soportado por PIL, etc.: se
-            # omite en vez de romper toda la exportación.
+            # corrupted image, format not supported by PIL, etc.: it is
+            # skipped instead of breaking the whole export.
             pass
 
     def update_from_excel(self, source) -> int:
-        """Lee un .xlsx (con las columnas de to_excel) desde `source`
-        (ruta u objeto tipo fichero) y actualiza solo comentario y
-        estado de cada fila, localizando el requisito por su ID
-        (columna A). Devuelve el número de filas aplicadas."""
+        """Reads an .xlsx (with the columns from to_excel) from `source`
+        (path or file-like object) and updates only the comment and
+        status of each row, locating the requirement by its ID
+        (column A). Returns the number of rows applied."""
         workbook = load_workbook(source, data_only=True)
         sheet = workbook['Requisitos'] if 'Requisitos' in workbook.sheetnames else workbook.active
 

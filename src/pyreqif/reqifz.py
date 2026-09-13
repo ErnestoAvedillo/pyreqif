@@ -1,4 +1,4 @@
-"""Reqifz: apertura, edición y reempaquetado de un .reqifz completo."""
+"""Reqifz: opening, editing, and repackaging a complete .reqifz."""
 from __future__ import annotations
 
 import shutil
@@ -10,14 +10,14 @@ from .reqif import Reqif
 
 
 class Reqifz:
-    """Un .reqifz es un zip con uno o varios .reqif más los ficheros
-    adjuntos que referencian (imágenes, documentos...). Esta clase lo
-    extrae a un directorio de trabajo, expone cada .reqif como un
-    `Reqif`, y permite reempaquetarlo todo de vuelta conservando los
-    adjuntos intactos.
+    """A .reqifz is a zip with one or more .reqif files plus the
+    attachment files they reference (images, documents...). This class
+    extracts it to a working directory, exposes each .reqif as a
+    `Reqif`, and allows repackaging everything back while keeping the
+    attachments intact.
 
-    Se puede usar como gestor de contexto para limpiar automáticamente
-    el directorio de trabajo cuando este se ha creado internamente:
+    Can be used as a context manager to automatically clean up the
+    working directory when it was created internally:
 
         with Reqifz("documento.reqifz") as pack:
             pack.documents[0].update("_abc123", status="akzeptiert")
@@ -37,11 +37,11 @@ class Reqifz:
         )
         self.documents: list[Reqif] = [Reqif(self.work_dir / p) for p in self._document_paths]
 
-    # -- acceso a los documentos ---------------------------------------
+    # -- document access ------------------------------------------------
 
     def get(self, name_or_index) -> Reqif:
-        """Busca un documento por índice, o por nombre (con o sin ruta
-        relativa dentro del zip)."""
+        """Looks up a document by index, or by name (with or without
+        its relative path within the zip)."""
         if isinstance(name_or_index, int):
             return self.documents[name_or_index]
         for rel_path, doc in zip(self._document_paths, self.documents):
@@ -58,23 +58,23 @@ class Reqifz:
     def document_names(self) -> list[str]:
         return [p.name for p in self._document_paths]
 
-    # -- adjuntos ------------------------------------------------------
+    # -- attachments ------------------------------------------------------
 
     def image_path(self, image_ref: str) -> Path:
-        """Resuelve una ruta de imagen (tal como aparece en
-        Requirement.images) a una ruta absoluta dentro del directorio
-        de trabajo."""
+        """Resolves an image path (as it appears in
+        Requirement.images) to an absolute path within the working
+        directory."""
         return self.work_dir / image_ref
 
     def read_image(self, image_ref: str) -> bytes:
         return self.image_path(image_ref).read_bytes()
 
-    # -- persistencia ----------------------------------------------------
+    # -- persistence ----------------------------------------------------
 
     def save(self, destination):
-        """Vuelca los cambios de cada documento y reempaqueta todo el
-        directorio de trabajo (documentos + adjuntos) en `destination`
-        (ruta u objeto tipo fichero), como .reqifz."""
+        """Flushes the changes of each document and repackages the
+        whole working directory (documents + attachments) into
+        `destination` (path or file-like object), as a .reqifz."""
         for rel_path, doc in zip(self._document_paths, self.documents):
             doc.save(self.work_dir / rel_path)
 
@@ -84,8 +84,8 @@ class Reqifz:
                     zf.write(file_path, file_path.relative_to(self.work_dir))
 
     def close(self):
-        """Borra el directorio de trabajo, solo si lo creó esta
-        instancia (no si se pasó `work_dir` explícitamente)."""
+        """Deletes the working directory, only if this instance
+        created it (not if `work_dir` was passed explicitly)."""
         if self._owns_work_dir and self.work_dir.exists():
             shutil.rmtree(self.work_dir)
 
