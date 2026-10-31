@@ -12,7 +12,7 @@ build: bump
 	uv run python -m build
 
 pypi: build
-	uv run python -m twine upload --repository pypi dist/pyreqif-$(VERSION)*
+	uv run python -m twine upload --repository pypi dist/pyreqifz-$(VERSION)*
 
 test: build
-	uv run python -m twine upload --repository testpypi dist/pyreqif-$(VERSION)*
+	uv run python -m twine upload --repository testpypi dist/pyreqifz-$(VERSION)*
